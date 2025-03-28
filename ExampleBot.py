@@ -2,7 +2,7 @@ import os
 import random
 import redis
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # Настройки
 TOKEN = "YOUR_BOT_TOKEN"  # Замени на свой токен
@@ -82,7 +82,7 @@ def get_background():
     return bg_path.decode('utf-8') if bg_path else DEFAULT_BACKGROUND
 
 # Команда /start
-def start(update: Update, context: CallbackContext):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not db.exists(f"user:{user_id}:balance"):
         set_balance(user_id, stars=50, coins=0)  # Стартовый баланс
@@ -90,22 +90,23 @@ def start(update: Update, context: CallbackContext):
     bg_path = get_background()
     try:
         with open(bg_path, 'rb') as bg_file:
-            update.message.reply_photo(
+            await update.message.reply_photo(
                 photo=bg_file,
                 caption=f"🎮 Добро пожаловать!\n⭐ Звёзды: {get_balance(user_id)['stars']}\n🪙 Монеты: {get_balance(user_id)['coins']}",
                 reply_markup=main_menu()
             )
     except FileNotFoundError:
-        update.message.reply_text("Ошибка: фон не найден. Админ, установите новый фон /setbg")
+        await update.message.reply_text("Ошибка: фон не найден. Админ, установите новый фон /setbg")
 
 # Покупка пака
-def buy_pack(update: Update, context: CallbackContext):
+async def buy_pack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    await query.answer()
     user_id = query.from_user.id
     balance = get_balance(user_id)
     
     if balance["stars"] < 15:
-        query.answer("❌ Недостаточно звёзд!")
+        await query.answer("❌ Недостаточно звёзд!")
         return
     
     # Списание звёзд и начисление монет
@@ -118,19 +119,20 @@ def buy_pack(update: Update, context: CallbackContext):
     
     # Формирование сообщения
     cards_text = "\n".join([f"🎴 {card['name']} ({card['rarity']})" for card in new_cards])
-    query.edit_message_caption(
+    await query.edit_message_caption(
         caption=f"🎉 Вы получили:\n{cards_text}\n\n⭐ Звёзды: {get_balance(user_id)['stars']}\n🪙 Монеты: {get_balance(user_id)['coins']}",
         reply_markup=main_menu()
     )
 
 # Профиль
-def show_profile(update: Update, context: CallbackContext):
+async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    await query.answer()
     user_id = query.from_user.id
     cards = get_user_cards(user_id)
     
     if not cards:
-        query.edit_message_caption(
+        await query.edit_message_caption(
             caption="📖 Ваш профиль пуст.\n\nОткройте хотя бы один пак!",
             reply_markup=main_menu()
         )
@@ -148,42 +150,41 @@ def show_profile(update: Update, context: CallbackContext):
         profile_text += f"\n🌟 {rarity.upper()}:\n"
         profile_text += "\n".join([f"• {card}" for card in cards_list])
     
-    query.edit_message_caption(
+    await query.edit_message_caption(
         caption=f"{profile_text}\n\n⭐ Звёзды: {get_balance(user_id)['stars']}\n🪙 Монеты: {get_balance(user_id)['coins']}",
         reply_markup=main_menu()
     )
 
 # Админ: смена фона
-def set_background(update: Update, context: CallbackContext):
+async def set_background(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
-        update.message.reply_text("❌ Только админ может использовать эту команду!")
+        await update.message.reply_text("❌ Только админ может использовать эту команду!")
         return
     
     if not update.message.photo:
-        update.message.reply_text("❌ Отправьте изображение!")
+        await update.message.reply_text("❌ Отправьте изображение!")
         return
     
     photo = update.message.photo[-1].get_file()
     new_bg_path = "custom_bg.jpg"
-    photo.download(new_bg_path)
+    await photo.download_to_drive(new_bg_path)
     db.set("app:background", new_bg_path)
-    update.message.reply_text("✅ Фон обновлён!")
+    await update.message.reply_text("✅ Фон обновлён!")
 
 # Главная функция
 def main():
-    updater = Updater(TOKEN)
-    dp = updater.dispatcher
+    application = Application.builder().token(TOKEN).build()
     
     # Обработчики
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("setbg", set_background))
-    dp.add_handler(CallbackQueryHandler(buy_pack, pattern="buy_pack"))
-    dp.add_handler(CallbackQueryHandler(show_profile, pattern="profile"))
-    dp.add_handler(CallbackQueryHandler(start, pattern="back"))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("setbg", set_background))
+    application.add_handler(CallbackQueryHandler(buy_pack, pattern="buy_pack"))
+    application.add_handler(CallbackQueryHandler(show_profile, pattern="profile"))
+    application.add_handler(CallbackQueryHandler(start, pattern="back"))
     
     print("Бот запущен!")
-    updater.start_polling()
-    updater.idle()
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
+    
