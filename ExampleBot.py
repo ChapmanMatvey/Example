@@ -1,6 +1,7 @@
 import os
 import random
 import redis
+import pytz  # Добавил тебе импорт pytz шоб проще было
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
@@ -8,11 +9,12 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 TOKEN = "YOUR_BOT_TOKEN"  # Замени на свой токен
 ADMIN_ID = 123456789  # Твой ID для админ-команд
 REDIS_URL = "redis://localhost:6379/0"  # Адрес Redis
+TIMEZONE = pytz.timezone('Europe/Moscow')  # Установи свою временную зону
 
 # Подключение к Redis
 db = redis.from_url(REDIS_URL)
 
-# Карточки и их шансы (веса)
+# Карточки и их шансы
 CARDS = {
     "common": [
         {"name": "Обычная карта 1", "image": "common1.png", "weight": 50},
@@ -187,4 +189,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
